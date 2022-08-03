@@ -1,6 +1,10 @@
+# -*- coding: utf-8 -*-
+
 import socket
 import struct
 import sys
+import time
+
 import numpy as np
 import cv2
 from collections import OrderedDict
@@ -50,16 +54,26 @@ class Minicap:
         self.__socket.connect((self.host, self.port))
 
     def on_image_transfered(self, data):
-        img_array = np.array(data, dtype=np.uint8)
+        a = map(lambda b: struct.unpack('B', b), data)
+        img_array = np.array(a, dtype=np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_UNCHANGED)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-        _, contours, _ = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        sqKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (22, 22))
+        tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, rectKernel)
+        gradX = cv2.Sobel(tophat, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+        gradX = np.absolute(gradX)
+        gradX = gradX.astype("uint8")
+        gradX = cv2.morphologyEx(gradX, cv2.MORPH_CLOSE, rectKernel)
+        thresh = cv2.threshold(gradX, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
 
-        draw_contours = cv2.drawContours(img, contours, -1, (0, 0, 255), 2)
-        cv2.imshow('img', draw_contours)
-        cv2.waitKey(10)
+        # 计算轮廓
+        thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, sqKernel)
+        contours = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[1]
+        cv2.drawContours(img, contours, -1, (0, 0, 255), 1)
 
+        cv2.imshow('img', img)
+        cv2.waitKey(1)
 
     def consume(self):
         read_banner_bytes = 0
@@ -83,7 +97,8 @@ class Minicap:
                     read_banner_bytes = banner_length
                     print(self.banner)
                 elif read_frame_bytes < 4:
-                    frame_body_length += (chunk[cursor] << (read_frame_bytes * 8)) >> 0
+                    frame_body_length += (struct.unpack('B', chunk[cursor])[0] << (read_frame_bytes * 8)) >> 0
+                    ##frame_body_length += (chunk[cursor] << (read_frame_bytes * 8)) >> 0
                     cursor += 1
                     read_frame_bytes += 1
                 else:
@@ -104,7 +119,7 @@ class Minicap:
                         cursor = buf_len
 
 
-if '__main__' == __name__:
+if __name__ == '__main__':
     mc = Minicap('localhost', 1717, Banner())
     mc.connect()
     mc.consume()

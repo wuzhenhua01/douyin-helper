@@ -2,28 +2,26 @@
 import cv2
 
 vc = cv2.VideoCapture("D:\\10059.mp4")
-ret, frame = vc.read()
+ret, src_img = vc.read()
 
 if vc.isOpened():
-    o, frame = vc.read()
+    o, src_img = vc.read()
 else:
     o = False
 
 while o:
-    ret, frame = vc.read()
-    if frame is None:
+    ret, src_img = vc.read()
+    if src_img is None:
         break
     if ret:
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        sobelx = cv2.Scharr(gray, cv2.CV_64F, 1, 0)
-        sobelx = cv2.convertScaleAbs(sobelx)
-        sobely = cv2.Scharr(gray, cv2.CV_64F, 0, 1)
-        sobely = cv2.convertScaleAbs(sobely)
-        sobelxy = cv2.addWeighted(sobelx, 0.5, sobely, 0.5, 0)
+        gray_img = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
+        _, binary_img = cv2.threshold(gray_img, 127, 255, cv2.THRESH_BINARY)
+        _, contours, _ = cv2.findContours(binary_img, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        tmp_img = src_img.copy()
+        res = cv2.drawContours(tmp_img, contours, -1, (0, 0, 255), 2)
+        cv2.imshow('res', res)
 
-        cv2.imshow('result', sobelxy)
-
-        if cv2.waitKey(10) & 0xFF == 27:
+        if cv2.waitKey(1) & 0xFF == 27:
             break
 vc.release()
 cv2.destroyAllWindows()
